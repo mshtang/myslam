@@ -1,5 +1,9 @@
 #include "myslam/visual_odometry.h"
 #include "myslam/config.h"
+#include "myslam/common_include.h"
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
 
 namespace myslam
 {
@@ -113,6 +117,64 @@ void VisualOdometry::setRef3DPoints()
             descriptor_ref_.push_back(descriptor_curr_.row(i));
         }
     }
+}
+
+void VisualOdometry::addKeyFrame()
+{
+    cout << "Adding a key frame\n";
+    map_->insertKeyFrame(curr_);
+}
+
+bool VisualOdometry::checkKeyFrame()
+{
+    Sophus::Vector6d d = Tcr_estimated_.log();
+    Vector3d translation = d.head(3);
+    Vector3d rotation = d.tail(3);
+    if (translation.norm() > key_frame_min_trans or rotation.norm() > key_frame_min_rot)
+        return true;
+    return false;
+}
+
+bool VisualOdometry::checkEstimationPose()
+{
+    if (num_inliners_ < min_inliners_)
+    {
+        cout << "Too few inliners: " << num_inliners_ << ". Rejected!";
+        return false;
+    }
+
+    Sophus::Vector6d d = Tcr_estimated_.log();
+    if (d.norm() > 5)
+    {
+        cout << "Motion is too large: " << d.norm() << ". Rejected!";
+        return false;
+    }
+
+    return true;
+}
+
+void VisualOdometry::poseEstimationPnP()
+{
+    // construct the 3d 2d observations
+    vector<cv::Point3f> pts3d;
+    vector<cv::Point2f> pts2d;
+
+    for (cv::DMatch m : feature_matches_)
+    {
+        pts3d.push_back(pts_3d_ref_[m.queryIdx]);
+        pts2d.push_back(keypoints_curr_[m.trainIdx].pt);
+    }
+
+    Mat K = (cv::Mat_<double>(3, 3) << ref_->camera_->fx_, 0, ref_->camera_->cx_,
+             0, ref_->camera_->fy_, ref_->camera_->cy_,
+             0, 0, 1);
+    Mat rvec, tvec, inliners;
+    cv::solvePnPRansac(pts3d, pts2d, K, Mat(), rvec, tvec, false, 100, 4.0, 0.99, inliners);
+    num_inliners_ = inliners.rows;
+    cout << "pnp inliers: " << num_inliners_ << endl;
+    Tcr_estimated_ = SE3(
+        Sophus::SO3(rvec.at<double>(0, 0), rvec.at<double>(1, 0), rvec.at<double>(2, 0)),
+        Vector3d(tvec.at<double>(0, 0), tvec.at<double>(1, 0), tvec.at<double>(2, 0)));
 }
 
 } // namespace myslam

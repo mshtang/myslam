@@ -4,6 +4,7 @@ namespace myslam
 {
 Frame::Frame() : id_(-1), time_stamp_(-1) {}
 Frame::Frame(long id, double time_stamp, SE3 Tcw, Camera::Ptr camera, Mat color, Mat depth) : id_(id), time_stamp_(time_stamp), Tcw_(Tcw), camera_(camera), color_(color), depth_(depth) {}
+Frame::~Frame() {}
 
 Frame::Ptr Frame::createFrame()
 {
