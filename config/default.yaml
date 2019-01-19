@@ -1,3 +1,5 @@
+%YAML:1.0
+
 # data_dir
 dataset_dir: /home/tmsh/Documents/myslam/data/rgbd_dataset_freiburg1_xyz
 

@@ -4,6 +4,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
+#include "myslam/g2o_types.h"
 
 namespace myslam
 {
@@ -175,6 +176,36 @@ void VisualOdometry::poseEstimationPnP()
     Tcr_estimated_ = SE3(
         Sophus::SO3(rvec.at<double>(0, 0), rvec.at<double>(1, 0), rvec.at<double>(2, 0)),
         Vector3d(tvec.at<double>(0, 0), tvec.at<double>(1, 0), tvec.at<double>(2, 0)));
+
+    typedef g2o::BlockSolver<g2o::BlockSolverTraits<6, 2>> Block;
+    Block::LinearSolverType *linearSolver = new g2o::LinearSolverDense<Block::PoseMatrixType>();
+    Block *solver_ptr = new Block(std::unique_ptr<Block::LinearSolverType>(linearSolver));
+    g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(std::unique_ptr<Block>(solver_ptr));
+    g2o::SparseOptimizer opt;
+    opt.setAlgorithm(solver);
+
+    g2o::VertexSE3Expmap *pose = new g2o::VertexSE3Expmap();
+    pose->setId(0);
+    pose->setEstimate(g2o::SE3Quat(Tcr_estimated_.rotation_matrix(), Tcr_estimated_.translation()));
+    opt.addVertex(pose);
+
+    for (int i = 0; i < inliners.rows; ++i)
+    {
+        int index = inliners.at<int>(i, 0);
+        EdgeProjectXYZ2UVPoseOnly *edge = new EdgeProjectXYZ2UVPoseOnly();
+        edge->setId(i);
+        edge->setVertex(0, pose);
+        edge->camera_ = curr_->camera_.get();
+        edge->point_ = Vector3d(pts3d[index].x, pts3d[index].y, pts3d[index].z);
+        edge->setMeasurement(Vector2d(pts2d[index].x, pts2d[index].y));
+        edge->setInformation(Eigen::Matrix2d::Identity());
+        opt.addEdge(edge);
+    }
+
+    opt.initializeOptimization();
+    opt.optimize(10);
+
+    Tcr_estimated_ = SE3(pose->estimate().rotation(), pose->estimate().translation());
 }
 
 } // namespace myslam
