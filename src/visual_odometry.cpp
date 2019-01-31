@@ -88,7 +88,7 @@ void VisualOdometry::featureMatching()
 {
     vector<cv::DMatch> matches;
     cv::Ptr<cv::BFMatcher> matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
-    matcher->match(descriptor_curr_, descriptor_ref_, matches);
+    matcher->match(descriptor_ref_, descriptor_curr_, matches);
     float min_dist = std::min_element(matches.begin(), matches.end(),
                                       [](const cv::DMatch &match1, const cv::DMatch &match2) { return match1.distance < match2.distance; })
                          ->distance;
@@ -108,7 +108,7 @@ void VisualOdometry::setRef3DPoints()
     descriptor_ref_ = Mat();
     for (int i = 0; i < keypoints_curr_.size(); ++i)
     {
-        double d = curr_->findDepth(keypoints_curr_[i]);
+        double d = ref_->findDepth(keypoints_curr_[i]);
         if (d > 0)
         {
             Vector3d pt_cam = ref_->camera_->pixel2camera(
@@ -202,7 +202,7 @@ void VisualOdometry::poseEstimationPnP()
         opt.addEdge(edge);
     }
 
-    opt.initializeOptimization();
+    opt.initializeOptimization(1);
     opt.optimize(10);
 
     Tcr_estimated_ = SE3(pose->estimate().rotation(), pose->estimate().translation());
